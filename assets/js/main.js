@@ -34,25 +34,64 @@ AOS.init({ duration: prefersReduced ? 0 : 700, once: true, offset: 80, disable: 
 // Menu modal: populate single modal from clicked card
 // - Cards have data-img, data-name, data-ingredients
 (function(){
-  const menuModal = document.getElementById('menuModal');
+  const menuModalEl = document.getElementById('menuModal');
   const modalTitle = document.getElementById('modalTitle');
   const modalImage = document.getElementById('modalImage');
   const modalIngredients = document.getElementById('modalIngredients');
 
-  // Event delegation: listen for show.bs.modal and populate
-  menuModal.addEventListener('show.bs.modal', function(e){
-    // bootstrap passes relatedTarget which is the clicked element
-    const trigger = e.relatedTarget || document.activeElement;
-    const name = trigger.getAttribute('data-name') || 'طبق';
-    const img = trigger.getAttribute('data-img') || trigger.querySelector('img')?.src || '';
-    const ingText = trigger.getAttribute('data-ingredients') || '';
+  // Helper: populate modal content from a card element
+  function populateModalFromCard(card){
+    if(!card) return;
+    const name = card.getAttribute('data-name') || 'طبق';
+    const img = card.getAttribute('data-img') || card.querySelector('img')?.src || '';
+    const ingText = card.getAttribute('data-ingredients') || '';
 
     modalTitle.textContent = name;
     modalImage.src = img;
-    // split ingredients by • or comma
     const parts = ingText.split('•').map(s=>s.trim()).filter(Boolean);
     modalIngredients.innerHTML = parts.map(p => `<li>${p}</li>`).join('');
+  }
+
+  // Intercept clicks on image anchors in the capture phase to prevent navigation.
+  // Use preventDefault/stopPropagation (not stopImmediatePropagation) so we don't
+  // accidentally block other Bootstrap internals. We'll open a single Modal instance.
+  const bsModal = new bootstrap.Modal(menuModalEl);
+
+  document.addEventListener('click', function(e){
+    const anchor = e.target.closest('.menu-card a.glightbox');
+    if(!anchor) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const card = anchor.closest('.menu-card');
+    if(card){
+      populateModalFromCard(card);
+      bsModal.show();
+    }
+  }, true);
+
+  // Make clicking anywhere on the card open the modal
+  document.querySelectorAll('.menu-card').forEach(card=>{
+    card.addEventListener('click', function(e){
+      // ignore clicks that originated from focusable controls we intentionally allow
+      const tag = e.target.tagName.toLowerCase();
+      if(tag === 'a' || tag === 'button' || e.target.closest('a.glightbox')) return;
+      populateModalFromCard(card);
+      bsModal.show();
+    });
   });
+
+  // Cleanup: sometimes third-party handlers or interrupted flows can leave the
+  // backdrop or `modal-open` class in place. Ensure we remove leftovers on hide.
+  menuModalEl.addEventListener('hidden.bs.modal', function(){
+    // remove any stray backdrops
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    // ensure body class is cleaned
+    document.body.classList.remove('modal-open');
+    // reset image src to free memory
+    try{ document.getElementById('modalImage').src = ''; }catch(e){}
+  });
+
+  // Keep existing behavior for keyboard: Enter will trigger click (already wired below)
 
 })();
 
